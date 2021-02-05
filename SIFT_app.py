@@ -42,68 +42,63 @@ class My_App(QtWidgets.QMainWindow):
 		pixmap = QtGui.QPixmap(self.template_path) #defines pixmap for image selected
 		self.template_label.setPixmap(pixmap)
 		print("Loaded template image file: " + self.template_path)
-		return self.template_path
+		
 
 
 		#converts cv image to a pixmap
 	def convert_cv_to_pixmap(self, cv_img):
-		#cv_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-		height, width = cv_img.shape #array size(height, width) and color channel(RGB has 3)
-		bytesPerLine = width #find bytes per line - comes from bits per pixel (0-255 for RGB)
+		cv_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+		height, width, channel = cv_img.shape #array size(height, width) and color channel(RGB has 3)
+		bytesPerLine = width * channel #find bytes per line - comes from bits per pixel (0-255 for RGB)
 		q_img = QtGui.QImage(cv_img.data, width, height, 
-                     bytesPerLine, QtGui.QImage.Format_Grayscale8)
+                     bytesPerLine, QtGui.QImage.Format_RGB888)
 		return QtGui.QPixmap.fromImage(q_img) #converts the q_img to a pixmap
 
         #converts camera images to pixmap (ongoing). Captures a frame every timer interval
-	
+
 	def SLOT_query_camera(self):
-			good_match = 10
-        	ret, img_train = self._camera_device.read() #saves return(boolean) and frame from camera
-        	if not ret:
-        		return
-        	#if not self.template_path:
-        	#	return
-        	img_query = cv2.imread(self.template_path, cv2.IMREAD_GRAYSCALE)
-        	gray_train = cv2.cvtColor(img_train, cv2.COLOR_BGR2GRAY) 
+		good_match = 10
+		ret, img_train = self._camera_device.read() #saves return(boolean) and frame from camera
+		
+		img_query = cv2.imread(self.template_path, cv2.IMREAD_GRAYSCALE)
+		gray_train = cv2.cvtColor(img_train, cv2.COLOR_BGR2GRAY) 
 
-        	#create sift and find features
-        	sift = cv2.xfeatures2d.SIFT_create()
-        	kp_img, desc_img = sift.detectAndCompute(img_query, None)
-        	kp_gray, desc_gray = sift.detectAndCompute(gray_train, None)
-        	
-        	#match features
-        	index_params = dict(algorithm = 0, trees = 5)
-        	search_params = dict()
-        	#find matches for given params
-        	flann = cv2.FlannBasedMatcher(index_params, search_params)
-        	matches = flann.knnMatch(desc_img, desc_gray, k=2)
-        	good_points = []
-        	for m,n in matches:
-        		if m.distance < 0.6 * n.distance: #adjust for more precision
-        			good_points.append(m)
-        	print(good_points)
-        	#applying RANSAC to sort inliers from outliers
-        	#if there are not enough match points, just show the image
-        	if good_points.len >= good_match:
+       	#create sift and find features
+		sift = cv2.xfeatures2d.SIFT_create()
 
-        		query_points = np.float32([kp_img[m.queryIdx.pt] for m in 
-        			good_points]).reshape(-1, 1, 2)
-        		print(query_points)
-        		train_points = np.float32([kp_gray[m.trainIdx.pt] for m in
-        			good_points]).reshape(-1, 1, 2)
-        		print(train_points)
-        		matrix, mask = cv2.findHomography(query_points, train_points, cv2.RANSAC, 3.0)
-        		match_mask = mask.ravel().tolist()
+		kp_img, desc_img = sift.detectAndCompute(img_query, None)
+		kp_gray, desc_gray = sift.detectAndCompute(gray_train, None)
 
-        	#apply perspective transformation
-        		h, w = img_query.shape
-        		points = np.float32([[0, 0], [0, h], [w, h], [w, 0]]).reshape(-1, 1, 2)
-        		dst = cv2.perspectiveTransform(points, matrix)
-        		homography = cv2.polylines(img_train, [np.int32(dst)], True, (0, 255, 0), 1)
-        	#show the homography image
-        	else:
-        	pixmap = self.convert_cv_to_pixmap(gray_train)
-        	self.live_image_label.setPixmap(pixmap)
+       	#match features
+		index_params = dict(algorithm = 0, trees = 5)
+		search_params = dict()
+       	#find matches for given params
+		flann = cv2.FlannBasedMatcher(index_params, search_params)
+		matches = flann.knnMatch(desc_img, desc_gray, k=2)
+
+		good_points = []
+		for m,n in matches:
+			if m.distance < 0.8 * n.distance: #adjust for more precision
+				good_points.append(m)
+
+       	#applying RANSAC to sort inliers from outliers
+       	#if there are not enough match points, just show the image
+		if len(good_points) >= good_match:
+			query_points = np.float32([kp_img[m.queryIdx].pt for m in 
+			good_points]).reshape(-1, 1, 2)
+			train_points = np.float32([kp_gray[m.trainIdx].pt for m in
+			good_points]).reshape(-1, 1, 2)
+			matrix, mask = cv2.findHomography(query_points, train_points, cv2.RANSAC, 3.0)
+			match_mask = mask.ravel().tolist()
+			h, w = img_query.shape
+			points = np.float32([[0, 0], [0, h], [w, h], [w, 0]]).reshape(-1, 1, 2)
+			dst = cv2.perspectiveTransform(points, matrix)
+			homography = cv2.polylines(img_train, [np.int32(dst)], True, (0, 255, 0), 3)
+		else: #if there aren't enough good points, show possible matches
+			homography = cv2.drawMatches(img_query, kp_img, gray_train, kp_gray, good_points, gray_train)		
+
+		pixmap = self.convert_cv_to_pixmap(homography)
+		self.live_image_label.setPixmap(pixmap) #display the image
 
         #turns the camera on and off and changes the label on the button
 	def SLOT_toggle_camera(self):
