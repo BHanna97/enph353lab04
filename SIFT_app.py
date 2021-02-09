@@ -48,11 +48,12 @@ class My_App(QtWidgets.QMainWindow):
 		#converts cv image to a pixmap
 	def convert_cv_to_pixmap(self, cv_img):
 		cv_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
-		height, width, channel = cv_img.shape #array size(height, width) and color channel(RGB has 3)
-		bytesPerLine = width * channel #find bytes per line - comes from bits per pixel (0-255 for RGB)
+		height, width, channel = cv_img.shape
+		bytesPerLine = channel * width
 		q_img = QtGui.QImage(cv_img.data, width, height, 
-                     bytesPerLine, QtGui.QImage.Format_RGB888)
-		return QtGui.QPixmap.fromImage(q_img) #converts the q_img to a pixmap
+			bytesPerLine, QtGui.QImage.Format_RGB888)
+		return QtGui.QPixmap.fromImage(q_img)
+
 
         #converts camera images to pixmap (ongoing). Captures a frame every timer interval
 
@@ -84,21 +85,28 @@ class My_App(QtWidgets.QMainWindow):
        	#applying RANSAC to sort inliers from outliers
        	#if there are not enough match points, just show the image
 		if len(good_points) >= good_match:
-			query_points = np.float32([kp_img[m.queryIdx].pt for m in 
-			good_points]).reshape(-1, 1, 2)
-			train_points = np.float32([kp_gray[m.trainIdx].pt for m in
-			good_points]).reshape(-1, 1, 2)
+			print("enough good points")
+			query_points = np.float32([kp_img[m.queryIdx].pt for m in good_points]).reshape(-1, 1, 2)
+			train_points = np.float32([kp_gray[m.trainIdx].pt for m in good_points]).reshape(-1, 1, 2)
 			matrix, mask = cv2.findHomography(query_points, train_points, cv2.RANSAC, 3.0)
 			match_mask = mask.ravel().tolist()
 			h, w = img_query.shape
 			points = np.float32([[0, 0], [0, h], [w, h], [w, 0]]).reshape(-1, 1, 2)
-			dst = cv2.perspectiveTransform(points, matrix)
-			homography = cv2.polylines(img_train, [np.int32(dst)], True, (0, 255, 0), 3)
-		else: #if there aren't enough good points, show possible matches
-			homography = cv2.drawMatches(img_query, kp_img, gray_train, kp_gray, good_points, gray_train)		
+			# print(points.shape)
+			# print(matrix.shape)
+			if matrix is not None:
+				dst = cv2.perspectiveTransform(points, matrix)
 
-		pixmap = self.convert_cv_to_pixmap(homography)
-		self.live_image_label.setPixmap(pixmap) #display the image
+				homography = cv2.polylines(img_train, [np.int32(dst)], True, (0, 255, 0), 3)
+				pixmap = self.convert_cv_to_pixmap(homography)
+				self.live_image_label.setPixmap(pixmap) #display the image
+		else: #if there aren't enough good points, show possible matches
+			print("draw matches only")
+			print(len(kp_img))
+			homography = cv2.drawMatches(img_query, kp_img, gray_train, kp_gray, good_points, img_train)		
+
+			pixmap = self.convert_cv_to_pixmap(homography)
+			self.live_image_label.setPixmap(pixmap) #display the image
 
         #turns the camera on and off and changes the label on the button
 	def SLOT_toggle_camera(self):
