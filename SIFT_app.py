@@ -58,7 +58,7 @@ class My_App(QtWidgets.QMainWindow):
         #converts camera images to pixmap (ongoing). Captures a frame every timer interval
 
 	def SLOT_query_camera(self):
-		good_match = 10
+		good_match = 13
 		ret, img_train = self._camera_device.read() #saves return(boolean) and frame from camera
 		
 		img_query = cv2.imread(self.template_path, cv2.IMREAD_GRAYSCALE)
@@ -85,15 +85,12 @@ class My_App(QtWidgets.QMainWindow):
        	#applying RANSAC to sort inliers from outliers
        	#if there are not enough match points, just show the image
 		if len(good_points) >= good_match:
-			print("enough good points")
 			query_points = np.float32([kp_img[m.queryIdx].pt for m in good_points]).reshape(-1, 1, 2)
 			train_points = np.float32([kp_gray[m.trainIdx].pt for m in good_points]).reshape(-1, 1, 2)
 			matrix, mask = cv2.findHomography(query_points, train_points, cv2.RANSAC, 3.0)
 			match_mask = mask.ravel().tolist()
 			h, w = img_query.shape
 			points = np.float32([[0, 0], [0, h], [w, h], [w, 0]]).reshape(-1, 1, 2)
-			# print(points.shape)
-			# print(matrix.shape)
 			if matrix is not None:
 				dst = cv2.perspectiveTransform(points, matrix)
 
@@ -101,8 +98,6 @@ class My_App(QtWidgets.QMainWindow):
 				pixmap = self.convert_cv_to_pixmap(homography)
 				self.live_image_label.setPixmap(pixmap) #display the image
 		else: #if there aren't enough good points, show possible matches
-			print("draw matches only")
-			print(len(kp_img))
 			homography = cv2.drawMatches(img_query, kp_img, gray_train, kp_gray, good_points, img_train)		
 
 			pixmap = self.convert_cv_to_pixmap(homography)
